@@ -86,6 +86,8 @@
   progress::-moz-progress-bar { background: var(--purple); }
   progress:indeterminate { background: repeating-linear-gradient(110deg,#e5d5fb 0 12px,#f2ebfa 12px 24px); }
   #load-status { min-height: 17px; margin-top: 5px; font-size: 11px; }
+  .load-error { margin-top: 7px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+  .load-error summary { cursor: pointer; }
   footer { color: var(--muted); font-size: 12px; padding-block: 17px 22px; }
   .icon { display: block; width: 17px; height: 17px; }
   .sr-only { clip-path: inset(50%); position: absolute; width: 1px; height: 1px; overflow: hidden; white-space: nowrap; }
@@ -166,6 +168,10 @@
       <div class="progress-row">
         <progress id="progress" value="0" max="100" aria-label="Model download progress"></progress>
         <p id="load-status" role="status">Ready to download</p>
+        <details id="load-error" class="load-error" hidden>
+          <summary>Error details</summary>
+          <p id="load-error-text"></p>
+        </details>
       </div>
     </aside>
   </div>
@@ -173,7 +179,7 @@
 </main>
 
 <script id="inference-worker" type="text/plain">
-  const model = "onnx-community/SmolLM2-135M-Instruct";
+  const model = "onnx-community/SmolLM2-135M-Instruct-ONNX";
   const modelFile = "onnx/model_quantized.onnx";
   const libraryURL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2/dist/transformers.min.js";
   const persona = [
@@ -293,7 +299,11 @@
       }
     } catch (error) {
       console.error(error);
-      send("error", { hasModel: Boolean(generator) });
+      send("error", {
+        hasModel: Boolean(generator),
+        stage: library ? "model" : "library",
+        detail: error?.message ?? String(error)
+      });
     } finally {
       busy = false;
     }
@@ -306,6 +316,8 @@
   const downloadLabel = byId("download-label");
   const progress = byId("progress");
   const loadStatus = byId("load-status");
+  const loadError = byId("load-error");
+  const loadErrorText = byId("load-error-text");
   const chatStatus = byId("chat-status");
   const modelSize = byId("model-size");
   const messages = byId("messages");
@@ -367,14 +379,21 @@
       : "Download the model to send a message.";
   }
 
-  function handleError(hasModel) {
+  function handleError({ hasModel = false, stage, detail } = {}) {
     loading = false;
     ready = hasModel;
     if (!hasModel) {
       download.disabled = false;
       downloadLabel.textContent = "Retry download";
       progress.value = 0;
-      loadStatus.textContent = "Model unavailable. Check your connection and try again.";
+      loadStatus.textContent = {
+        library: "Couldn’t load Transformers.js from jsDelivr.",
+        model: "Couldn’t load or start the model.",
+        worker: "Couldn’t start the browser worker."
+      }[stage] ?? "Model unavailable.";
+      loadError.open = false;
+      loadError.hidden = !detail;
+      loadErrorText.textContent = detail ?? "";
       chatStatus.textContent = "Waiting for the model";
     }
     if (pending) {
@@ -446,7 +465,7 @@
         }
         break;
       case "error":
-        handleError(data.hasModel);
+        handleError(data);
         return;
     }
     updateComposer();
@@ -458,10 +477,10 @@
     try {
       const instance = new Worker(url, { type: "module" });
       instance.onmessage = onWorkerMessage;
-      instance.onerror = () => {
+      instance.onerror = (event) => {
         instance.terminate();
         worker = null;
-        handleError(false);
+        handleError({ stage: "worker", detail: event.message });
       };
       return instance;
     } finally {
@@ -472,6 +491,7 @@
   download.addEventListener("click", () => {
     if (loading || ready) return;
     loading = true;
+    loadError.hidden = true;
     download.disabled = true;
     downloadLabel.textContent = "Loading model…";
     loadStatus.textContent = "Loading Transformers.js…";
@@ -481,7 +501,7 @@
       worker.postMessage({ type: "load" });
     } catch (error) {
       console.error(error);
-      handleError(false);
+      handleError({ stage: "worker", detail: error.message });
     }
   });
 

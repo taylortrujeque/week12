@@ -2,6 +2,8 @@
 
 A single-page Bugs Bunny chat that runs SmolLM2-135M-Instruct in the browser with Transformers.js.
 
+The original model is published by [Hugging Face TB](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct). The app downloads the 8-bit ONNX export from the [browser model repository](https://huggingface.co/onnx-community/SmolLM2-135M-Instruct-ONNX).
+
 ## GitHub Pages
 
 In the repository, open **Settings → Pages** and choose **GitHub Actions** as the source. Push the site files to `main` to deploy. The **Deploy to GitHub Pages** workflow also supports manual runs from the **Actions** tab. GitHub shows the deployed URL in the workflow run and in **Settings → Pages**.
